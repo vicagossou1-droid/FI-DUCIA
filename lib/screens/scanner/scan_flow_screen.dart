@@ -503,10 +503,17 @@ class _QRStepState extends State<_QRStep> with WidgetsBindingObserver {
                 _scanned = true;
                 _isProcessing = true;
               });
-              await widget
-                  .onScanned('TEST_CLIENT_${DateTime.now().millisecondsSinceEpoch}');
-              if (!mounted) return;
-              setState(() => _isProcessing = false);
+              try {
+                await widget.onScanned(
+                    'TEST_CLIENT_${DateTime.now().millisecondsSinceEpoch}');
+              } catch (e) {
+                debugPrint('🚨 [SCANNER] Erreur post-scan: $e');
+                if (!mounted) return;
+                setState(() => _scanned = false);
+              } finally {
+                if (!mounted) return;
+                setState(() => _isProcessing = false);
+              }
             },
             child: const Text(
               'Test',
@@ -548,9 +555,16 @@ class _QRStepState extends State<_QRStep> with WidgetsBindingObserver {
               });
 
               // Appelle la fonction pour passer à l'étape suivante
-              await widget.onScanned(code);
-              if (!mounted) return;
-              setState(() => _isProcessing = false);
+              try {
+                await widget.onScanned(code);
+              } catch (e) {
+                debugPrint('🚨 [SCANNER] Erreur post-scan: $e');
+                if (!mounted) return;
+                setState(() => _scanned = false);
+              } finally {
+                if (!mounted) return;
+                setState(() => _isProcessing = false);
+              }
             },
           ),
           // Overlay
@@ -595,9 +609,16 @@ class _QRStepState extends State<_QRStep> with WidgetsBindingObserver {
                       _scanned = true;
                       _isProcessing = true;
                     });
-                    await widget.onScanned('TEST_CLIENT_123');
-                    if (!mounted) return;
-                    setState(() => _isProcessing = false);
+                    try {
+                      await widget.onScanned('TEST_CLIENT_123');
+                    } catch (e) {
+                      debugPrint('🚨 [SCANNER] Erreur bypass post-scan: $e');
+                      if (!mounted) return;
+                      setState(() => _scanned = false);
+                    } finally {
+                      if (!mounted) return;
+                      setState(() => _isProcessing = false);
+                    }
                   },
                   child: const Text('FORCER LE SCAN (TEST)'),
                 ),
