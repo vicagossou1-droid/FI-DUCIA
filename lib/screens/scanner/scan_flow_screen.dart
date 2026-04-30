@@ -432,16 +432,17 @@ class _QRStep extends StatefulWidget {
 
 class _QRStepState extends State<_QRStep> with WidgetsBindingObserver {
   bool _scanned = false;
-  final MobileScannerController _ctrl = MobileScannerController(
-    autoStart: true,
-    detectionSpeed: DetectionSpeed.normal,
-    facing: CameraFacing.back,
-    formats: const [BarcodeFormat.all],
-  );
+  late final MobileScannerController _ctrl;
 
   @override
   void initState() {
     super.initState();
+    _ctrl = MobileScannerController(
+      autoStart: true,
+      detectionSpeed: DetectionSpeed.normal,
+      facing: CameraFacing.back,
+      formats: const [BarcodeFormat.all],
+    );
     WidgetsBinding.instance.addObserver(this);
     // Démarrage explicite pour éviter un contrôleur inactif selon le cycle de vie.
     _ctrl.start();
@@ -515,13 +516,17 @@ class _QRStepState extends State<_QRStep> with WidgetsBindingObserver {
             controller: _ctrl,
             fit: BoxFit.cover,
             onDetect: (capture) {
-              debugPrint('🚨 [DEBUG SCANNER] LECTURE BRUTE : ${capture.barcodes.first.rawValue}');
+              final barcodes = capture.barcodes;
+              if (barcodes.isEmpty) return; // Sécurité vitale
+
+              final String code = barcodes.first.rawValue ?? 'QR_EMPTY_PAYLOAD';
+              debugPrint('🚨 [DEBUG SCANNER] LECTURE BRUTE : $code');
+
               if (_scanned) return;
-              final barcode = capture.barcodes.firstOrNull;
-              final String code = barcode?.rawValue ?? 'QR_EMPTY_PAYLOAD';
-              debugPrint('QR DETECTE : $code');
               setState(() => _scanned = true);
               _ctrl.stop();
+
+              // Appelle la fonction pour passer à l'étape suivante
               widget.onScanned(code);
             },
           ),
@@ -547,11 +552,30 @@ class _QRStepState extends State<_QRStep> with WidgetsBindingObserver {
             bottom: 40,
             left: 0,
             right: 0,
-            child: Center(
-                child: Text('Pointez le QR Code du carnet client',
-                    style: TextStyle(
-                        color: Colors.white.withOpacity(0.8), fontSize: 13),
-                    textAlign: TextAlign.center)),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Center(
+                    child: Text('Pointez le QR Code du carnet client',
+                        style: TextStyle(
+                            color: Colors.white.withOpacity(0.8), fontSize: 13),
+                        textAlign: TextAlign.center)),
+                const SizedBox(height: 12),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(AppColors.red),
+                    foregroundColor: Colors.white,
+                  ),
+                  onPressed: () {
+                    if (_scanned) return;
+                    setState(() => _scanned = true);
+                    _ctrl.stop();
+                    widget.onScanned('TEST_CLIENT_123');
+                  },
+                  child: const Text('FORCER LE SCAN (TEST)'),
+                ),
+              ],
+            ),
           ),
         ]),
       ),
