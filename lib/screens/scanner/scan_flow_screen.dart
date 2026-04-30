@@ -181,8 +181,22 @@ class _ScanFlowScreenState extends State<ScanFlowScreen> {
     _clientId = qrData;
     _clientNom = 'Client $qrData'; // Victor/Ayao fourniront le vrai nom
     _scanCountToday = await LocalDB.getScanCount(qrData);
-    final geofenceDecision =
-        await GeofenceService.instance.validateLocation(_clientId!);
+    GeofenceDecision? geofenceDecision;
+    try {
+      geofenceDecision =
+          await GeofenceService.instance.validateLocation(_clientId!);
+    } catch (e) {
+      debugPrint('🚨 [GEOFENCE] Exception pendant validation: $e');
+      if (!mounted) return;
+      // Timeout / erreur technique: forcer la preuve visuelle (CAS B).
+      setState(() {
+        _gpsValide = false;
+        _requiresPhotoProof = true;
+        _needsPhoto = true;
+        _step = 3;
+      });
+      return;
+    }
 
     if (!mounted) return;
 
@@ -200,14 +214,13 @@ class _ScanFlowScreenState extends State<ScanFlowScreen> {
         geofenceDecision.gpsIssue == GpsIssue.timeout;
 
     if (gpsSignalMissing) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text(
-              'Signal GPS requis pour valider cette collecte. Veuillez activer votre localisation.'),
-          backgroundColor: Color(AppColors.red),
-        ));
-      }
-      setState(() => _step = 1);
+      // GPS introuvable / timeout: forcer la preuve visuelle (CAS B).
+      setState(() {
+        _gpsValide = false;
+        _requiresPhotoProof = true;
+        _needsPhoto = true;
+        _step = 3;
+      });
       return;
     }
 
@@ -225,7 +238,7 @@ class _ScanFlowScreenState extends State<ScanFlowScreen> {
       return;
     }
 
-    // CAS B: hors zone / alerte -> passage photo obligatoire avant montant
+    // CAS B: hors zone / alerte / rejet -> passage photo obligatoire avant montant
     setState(() {
       _needsPhoto = true;
       _step = 3;
@@ -423,7 +436,7 @@ class _HomeStep extends StatelessWidget {
 
 // ── STEP 1 : QR SCAN ──
 class _QRStep extends StatefulWidget {
-  final Function(String) onScanned;
+  final Future<void> Function(String) onScanned;
   final VoidCallback onBack;
   const _QRStep({super.key, required this.onScanned, required this.onBack});
   @override
@@ -432,6 +445,7 @@ class _QRStep extends StatefulWidget {
 
 class _QRStepState extends State<_QRStep> with WidgetsBindingObserver {
   bool _scanned = false;
+  bool _isProcessing = false;
   late final MobileScannerController _ctrl;
 
   @override
@@ -483,11 +497,16 @@ class _QRStepState extends State<_QRStep> with WidgetsBindingObserver {
                       fontSize: 16),
                   textAlign: TextAlign.center)),
           TextButton(
-            onPressed: () {
-              setState(() => _scanned = true);
-              _ctrl.stop();
-              widget.onScanned(
-                  'TEST_CLIENT_${DateTime.now().millisecondsSinceEpoch}');
+            onPressed: () async {
+              if (_scanned || _isProcessing) return;
+              setState(() {
+                _scanned = true;
+                _isProcessing = true;
+              });
+              await widget
+                  .onScanned('TEST_CLIENT_${DateTime.now().millisecondsSinceEpoch}');
+              if (!mounted) return;
+              setState(() => _isProcessing = false);
             },
             child: const Text(
               'Test',
@@ -515,19 +534,23 @@ class _QRStepState extends State<_QRStep> with WidgetsBindingObserver {
           MobileScanner(
             controller: _ctrl,
             fit: BoxFit.cover,
-            onDetect: (capture) {
+            onDetect: (capture) async {
               final barcodes = capture.barcodes;
               if (barcodes.isEmpty) return; // Sécurité vitale
 
               final String code = barcodes.first.rawValue ?? 'QR_EMPTY_PAYLOAD';
               debugPrint('🚨 [DEBUG SCANNER] LECTURE BRUTE : $code');
 
-              if (_scanned) return;
-              setState(() => _scanned = true);
-              _ctrl.stop();
+              if (_scanned || _isProcessing) return;
+              setState(() {
+                _scanned = true;
+                _isProcessing = true;
+              });
 
               // Appelle la fonction pour passer à l'étape suivante
-              widget.onScanned(code);
+              await widget.onScanned(code);
+              if (!mounted) return;
+              setState(() => _isProcessing = false);
             },
           ),
           // Overlay
@@ -566,17 +589,40 @@ class _QRStepState extends State<_QRStep> with WidgetsBindingObserver {
                     backgroundColor: const Color(AppColors.red),
                     foregroundColor: Colors.white,
                   ),
-                  onPressed: () {
-                    if (_scanned) return;
-                    setState(() => _scanned = true);
-                    _ctrl.stop();
-                    widget.onScanned('TEST_CLIENT_123');
+                  onPressed: () async {
+                    if (_scanned || _isProcessing) return;
+                    setState(() {
+                      _scanned = true;
+                      _isProcessing = true;
+                    });
+                    await widget.onScanned('TEST_CLIENT_123');
+                    if (!mounted) return;
+                    setState(() => _isProcessing = false);
                   },
                   child: const Text('FORCER LE SCAN (TEST)'),
                 ),
               ],
             ),
           ),
+          if (_isProcessing)
+            Positioned.fill(
+              child: Container(
+                color: Colors.black54,
+                child: const Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      CircularProgressIndicator(),
+                      SizedBox(height: 12),
+                      Text(
+                        'Vérification de sécurité en cours...',
+                        style: TextStyle(color: Colors.white),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
         ]),
       ),
     ]);
