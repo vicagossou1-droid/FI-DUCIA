@@ -430,7 +430,7 @@ class _QRStep extends StatefulWidget {
   State<_QRStep> createState() => _QRStepState();
 }
 
-class _QRStepState extends State<_QRStep> {
+class _QRStepState extends State<_QRStep> with WidgetsBindingObserver {
   bool _scanned = false;
   final MobileScannerController _ctrl = MobileScannerController(
     autoStart: true,
@@ -442,12 +442,24 @@ class _QRStepState extends State<_QRStep> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    // Démarrage explicite pour éviter un contrôleur inactif selon le cycle de vie.
+    _ctrl.start();
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _ctrl.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (!mounted) return;
+    if (state == AppLifecycleState.resumed && !_scanned) {
+      _ctrl.start();
+    }
   }
 
   @override
