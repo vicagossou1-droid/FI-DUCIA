@@ -436,7 +436,7 @@ class _QRStepState extends State<_QRStep> {
     autoStart: true,
     detectionSpeed: DetectionSpeed.normal,
     facing: CameraFacing.back,
-    formats: const [BarcodeFormat.qrCode],
+    formats: const [BarcodeFormat.all],
   );
 
   @override
@@ -505,10 +505,12 @@ class _QRStepState extends State<_QRStep> {
             onDetect: (capture) {
               if (_scanned) return;
               final barcode = capture.barcodes.firstOrNull;
-              if (barcode?.rawValue != null) {
+              final String? code = barcode?.rawValue;
+              debugPrint('QR DETECTE : $code');
+              if (code != null) {
                 setState(() => _scanned = true);
                 _ctrl.stop();
-                widget.onScanned(barcode!.rawValue!);
+                widget.onScanned(code);
               }
             },
           ),
