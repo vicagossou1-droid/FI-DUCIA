@@ -515,15 +515,14 @@ class _QRStepState extends State<_QRStep> with WidgetsBindingObserver {
             controller: _ctrl,
             fit: BoxFit.cover,
             onDetect: (capture) {
+              debugPrint('🚨 [DEBUG SCANNER] LECTURE BRUTE : ${capture.barcodes.first.rawValue}');
               if (_scanned) return;
               final barcode = capture.barcodes.firstOrNull;
-              final String? code = barcode?.rawValue;
+              final String code = barcode?.rawValue ?? 'QR_EMPTY_PAYLOAD';
               debugPrint('QR DETECTE : $code');
-              if (code != null) {
-                setState(() => _scanned = true);
-                _ctrl.stop();
-                widget.onScanned(code);
-              }
+              setState(() => _scanned = true);
+              _ctrl.stop();
+              widget.onScanned(code);
             },
           ),
           // Overlay
