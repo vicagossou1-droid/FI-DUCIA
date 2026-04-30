@@ -1,0 +1,77 @@
+name: fi_ducia
+description: FI-DUCIA – QR Code, Photos & Collecte sécurisée
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+
+  # Supabase
+  supabase_flutter: ^2.5.6
+
+  # QR Code Scanner
+  mobile_scanner: ^5.2.3
+
+  # Camera & Photos
+  camera: ^0.11.0+2
+  image_picker: ^1.1.2
+  image: ^4.2.0
+
+  # Stockage local
+  sqflite: ^2.3.3+1
+  path_provider: ^2.1.3
+  shared_preferences: ^2.3.2
+
+  # UI & Animations
+  flutter_animate: ^4.5.0
+  google_fonts: ^6.2.1
+  shimmer: ^3.0.0
+  lottie: ^3.1.2
+  confetti: ^0.7.0
+  vibration: ^3.1.8
+
+  # Utilitaires
+  intl: ^0.20.2
+  uuid: ^4.4.0
+  permission_handler: ^11.3.1
+  connectivity_plus: ^6.0.5
+  path: ^1.9.0
+  geolocator: ^14.0.2
+
+  # Moteur technique (cartes offline, tracking, SQLite avancé)
+  android_alarm_manager_plus: ^4.0.8
+  encrypt: ^5.0.3
+  flutter_dotenv: ^5.2.1
+  flutter_map: ^7.0.2
+  latlong2: ^0.9.1
+  flutter_activity_recognition: ^4.0.0
+  flutter_map_mbtiles: ^1.0.4
+  vector_map_tiles: any
+  vector_map_tiles_mbtiles: any
+  sqlite3_flutter_libs: any
+  sqlite3: any
+  vector_tile_renderer: ^5.2.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+  flutter_launcher_icons: ^0.14.4
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/Logo.jpeg
+    - assets/maps/
+
+flutter_icons:
+  android: true
+  ios: true
+  image_path: assets/Logo.jpeg
+  remove_alpha: false
