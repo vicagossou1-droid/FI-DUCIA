@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:camera/camera.dart';
@@ -39,6 +40,7 @@ class ScanFlowScreen extends StatefulWidget {
 class _ScanFlowScreenState extends State<ScanFlowScreen> {
   int _step =
       0; // 0=home, 1=scan, 2=gps, 3=photo, 4=montant, 5=signature, 6=succes
+  final GlobalKey<_QRStepState> _qrKey = GlobalKey<_QRStepState>();
   String? _clientId;
   String? _clientNom;
   String? _photoPath;
@@ -105,7 +107,7 @@ class _ScanFlowScreenState extends State<ScanFlowScreen> {
                 .then((_) => _loadStats()));
       case 1:
         return _QRStep(
-            key: const ValueKey(1),
+            key: _qrKey,
             onScanned: _onQRScanned,
             onBack: () => setState(() => _step = 0));
       case 2:
@@ -188,6 +190,7 @@ class _ScanFlowScreenState extends State<ScanFlowScreen> {
     } catch (e) {
       debugPrint('🚨 [GEOFENCE] Exception pendant validation: $e');
       if (!mounted) return;
+      await _qrKey.currentState?.stopScanner();
       // Timeout / erreur technique: forcer la preuve visuelle (CAS B).
       setState(() {
         _gpsValide = false;
@@ -214,6 +217,7 @@ class _ScanFlowScreenState extends State<ScanFlowScreen> {
         geofenceDecision.gpsIssue == GpsIssue.timeout;
 
     if (gpsSignalMissing) {
+      await _qrKey.currentState?.stopScanner();
       // GPS introuvable / timeout: forcer la preuve visuelle (CAS B).
       setState(() {
         _gpsValide = false;
@@ -227,6 +231,8 @@ class _ScanFlowScreenState extends State<ScanFlowScreen> {
     final isAllowed = geofenceDecision.isAllowed;
     _gpsValide = isAllowed;
     _requiresPhotoProof = !isAllowed;
+
+    await _qrKey.currentState?.stopScanner();
 
     // CAS A: géofence valide -> accès direct au montant
     if (isAllowed) {
@@ -455,11 +461,15 @@ class _QRStepState extends State<_QRStep> with WidgetsBindingObserver {
       autoStart: true,
       detectionSpeed: DetectionSpeed.normal,
       facing: CameraFacing.back,
-      formats: const [BarcodeFormat.all],
+      formats: const [BarcodeFormat.qrCode],
     );
     WidgetsBinding.instance.addObserver(this);
     // Démarrage explicite pour éviter un contrôleur inactif selon le cycle de vie.
     _ctrl.start();
+  }
+
+  Future<void> stopScanner() async {
+    await _ctrl.stop();
   }
 
   @override
@@ -538,8 +548,9 @@ class _QRStepState extends State<_QRStep> with WidgetsBindingObserver {
       // Camera
       Expanded(
         child: Stack(children: [
-          MobileScanner(
-            controller: _ctrl,
+          Positioned.fill(
+            child: MobileScanner(
+              controller: _ctrl,
             fit: BoxFit.cover,
             onDetect: (capture) async {
               final barcodes = capture.barcodes;
@@ -554,6 +565,17 @@ class _QRStepState extends State<_QRStep> with WidgetsBindingObserver {
                 _isProcessing = true;
               });
 
+              HapticFeedback.vibrate();
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Code détecté, vérification de la position...', style: TextStyle(color: Colors.white)),
+                    backgroundColor: Color(AppColors.blue),
+                    duration: Duration(milliseconds: 1500),
+                  ),
+                );
+              }
+
               // Appelle la fonction pour passer à l'étape suivante
               try {
                 await widget.onScanned(code);
@@ -566,6 +588,7 @@ class _QRStepState extends State<_QRStep> with WidgetsBindingObserver {
                 setState(() => _isProcessing = false);
               }
             },
+          ),
           ),
           // Overlay
           Center(
@@ -605,12 +628,16 @@ class _QRStepState extends State<_QRStep> with WidgetsBindingObserver {
                   ),
                   onPressed: () async {
                     if (_scanned || _isProcessing) return;
+                    
+                    debugPrint("🔴🔴🔴 BOUTON FORCER CLIQUÉ ! Démarrage du flux... 🔴🔴🔴");
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Démarrage du test... Attente du GPS (max 15s)")));
+                    
                     setState(() {
                       _scanned = true;
                       _isProcessing = true;
                     });
                     try {
-                      await widget.onScanned('TEST_CLIENT_123');
+                      await widget.onScanned('TEST_${DateTime.now().millisecondsSinceEpoch}');
                     } catch (e) {
                       debugPrint('🚨 [SCANNER] Erreur bypass post-scan: $e');
                       if (!mounted) return;
@@ -628,15 +655,15 @@ class _QRStepState extends State<_QRStep> with WidgetsBindingObserver {
           if (_isProcessing)
             Positioned.fill(
               child: Container(
-                color: Colors.black54,
+                color: Colors.black.withOpacity(0.7),
                 child: const Center(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      CircularProgressIndicator(),
-                      SizedBox(height: 12),
+                      CircularProgressIndicator(color: Colors.white),
+                      SizedBox(height: 16),
                       Text(
-                        'Vérification de sécurité en cours...',
+                        "Vérification GPS (Patientez max 15s)...",
                         style: TextStyle(color: Colors.white),
                       ),
                     ],
@@ -861,13 +888,16 @@ class _PhotoStepState extends State<_PhotoStep> {
   }
 
   Future<void> _initCamera() async {
-    if (PhotoService.cameras.isEmpty) await PhotoService.init();
-    if (PhotoService.cameras.isEmpty) {
-      setState(() => _ready = false);
-      return;
+    final cameras = await availableCameras();
+    if (cameras.isEmpty) {
+      debugPrint("🚨 ERREUR : Aucune caméra disponible ou ressource bloquée.");
+      if (mounted) setState(() => _ready = false);
+      return; 
     }
+    final firstCamera = cameras.first;
+    
     _camCtrl = CameraController(
-        PhotoService.cameras.first, ResolutionPreset.medium,
+        firstCamera, ResolutionPreset.medium,
         enableAudio: false);
     await _camCtrl!.initialize();
     if (mounted) setState(() => _ready = true);
